@@ -48,52 +48,25 @@ temp_dir = "temp"
 if not os.path.exists(temp_dir):
     os.makedirs(temp_dir)
 
-# # 히트맵 생성 및 원본 이미지에 오버레이하는 함수
-# def overlay_heatmap_on_image(original_image_path, heatmap_path, filename, alpha=0.6):
-#     os.path.join(temp_dir, filename)
-#     original_image = cv2.imread(original_image_path)
-#     heatmap = cv2.imread(heatmap_path)  
-
-#     # 원본 이미지의 크기에 맞게 히트맵의 크기 조정
-#     heatmap_resized = cv2.resize(heatmap, (original_image.shape[1], original_image.shape[0]))
-
-#     # 원본 이미지에 히트맵 오버레이
-#     overlayed_image = cv2.addWeighted(original_image, 1-alpha, heatmap_resized, alpha, 0)
-
-#     # 오버레이된 이미지 저장
-#     cv2.imwrite(output_path, overlayed_image)
-
-
-# 유클리디안 거리 제곱에 기반한 히트맵 생성 함수
-def generate_heatmap(euclidean_distance_vector,filename):
-    
-    # 유클리디안 거리 벡터를 원본 이미지의 형태로 변환
-    
-    vector_length = len(euclidean_distance_vector)
-    size = int(np.ceil(np.sqrt(vector_length)))
-    padded_length = size * size
-
-    # 원본 벡터에 패딩 추가
-    padded_vector = np.zeros(padded_length)
-    padded_vector[:vector_length] = euclidean_distance_vector
-    
+def generate_heatmap(euclidean_distance_vector, filename):
+    # 유클리디안 거리 벡터를 히트맵으로 변환 및 저장
+    size = int(np.ceil(np.sqrt(len(euclidean_distance_vector))))
+    padded_vector = np.pad(euclidean_distance_vector, (0, size*size - len(euclidean_distance_vector)), 'constant', constant_values=(0, 0))
     vector_2d = padded_vector.reshape((size, size))
-    
-    # 값 정규화
-    normalized_value = cv2.normalize(vector_2d, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX)
-    normalized_vector = np.uint8(normalized_value)
-    
-    # 컬러맵 적용하여 히트맵 생성
+    normalized_vector = cv2.normalize(vector_2d, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX).astype(np.uint8)
     heatmap_img = cv2.applyColorMap(normalized_vector, cv2.COLORMAP_JET)
-    
-    # 히트맵 이미지 파일로 저장
     heatmap_path = os.path.join(temp_dir, filename)
     cv2.imwrite(heatmap_path, heatmap_img)
-    # cv2.imshow("Heatmap",heatmap_img)
-    # cv2.waitKey(0)
-    # cv2.destroyAllWindows()
     return heatmap_path
-    
+
+def overlay_heatmap_on_image(original_image_path, heatmap_path, output_filename, alpha=1.0):
+    original_image = cv2.imread(original_image_path)
+    heatmap = cv2.imread(heatmap_path)
+    heatmap_resized = cv2.resize(heatmap, (original_image.shape[1], original_image.shape[0]))
+    overlayed_image = cv2.addWeighted(original_image, 1-alpha, heatmap_resized, alpha, 0)
+    output_path = os.path.join(temp_dir, output_filename)
+    cv2.imwrite(output_path, overlayed_image)
+    return output_path                     
 
 @app.get("/",response_class=HTMLResponse)
 async def main(request : Request):
@@ -143,12 +116,13 @@ async def upload_file(file: UploadFile = File(...)):
             # 결과 정보 추출
                 paths = top_similar_faces['identity'].tolist()  # 이미지 경로 리스트로 변환
                 distances = top_similar_faces['distance'].tolist()  # 거리 값 리스트로 변환
-                heatmap_paths = [] #히트맵 경로 초기화
+                heatmap_paths = [] # 히트맵 경로 초기화
 
                 for index, row in top_similar_faces.iterrows():
+                    identity_path = row['identity']
                     # DeepFace.represent를 사용하여 표현 벡터 추출
-                    db_result = DeepFace.represent(img_path=row['identity'], model_name=models[2], enforce_detection=False)
-                    target_result = DeepFace.represent(img_path=temp_file_path, model_name=models[2], enforce_detection=False)
+                    db_result = DeepFace.represent(img_path=row['identity'], model_name=models[2], detector_backend=backends[2], enforce_detection=True)
+                    target_result = DeepFace.represent(img_path=temp_file_path, model_name=models[2], detector_backend=backends[2], enforce_detection=True)
                     
                     # 임베딩 벡터 추출
                     db_representation = db_result[0]['embedding']
@@ -176,7 +150,9 @@ async def upload_file(file: UploadFile = File(...)):
                     heatmap_path = generate_heatmap(euclidean_distance_squared,heatmap_filename)
                     heatmap_paths.append(heatmap_path)
                     
-                    overlay_heatmap_on_image(paths,heatmap_paths,)
+                    output_filename = f"overlayed_{index}.png"  # 오버레이된 이미지의 파일명
+                    overlay_path = overlay_heatmap_on_image(identity_path, heatmap_path, output_filename, alpha=0.6)
+                    print(f"Overlayed image saved to: {overlay_path}")
 
                     # print("Top similar faces paths:", paths)
                     # print("Distances:", distances)
