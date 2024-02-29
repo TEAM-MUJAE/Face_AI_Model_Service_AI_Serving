@@ -1,4 +1,4 @@
-from fastapi import FastAPI, File, UploadFile, Request
+from fastapi import FastAPI, File, UploadFile, Request, APIRouter
 from fastapi.templating import Jinja2Templates
 from deepface.detectors import DetectorWrapper
 from deepface import DeepFace
@@ -6,14 +6,14 @@ import numpy as np
 import cv2
 
 app = FastAPI()
-
+router = APIRouter()
 templates = Jinja2Templates(directory="view")
 
-@app.get("/")
+@router.get("/")
 async def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
-@app.post("/people")
+@router.post("/people")
 async def compare_faces(file1: UploadFile = File(...), file2: UploadFile = File(...), file3: UploadFile = File(...)):
      
     contents1 = await file1.read()

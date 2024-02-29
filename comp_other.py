@@ -1,22 +1,19 @@
-from fastapi import FastAPI, File, UploadFile, Request
+from fastapi import FastAPI, File, UploadFile, Request, APIRouter
 from fastapi.templating import Jinja2Templates
 from deepface.detectors import DetectorWrapper
 from deepface import DeepFace
 import numpy as np
 import cv2
-import uvicorn
-
-
 
 app = FastAPI()
-
+router = APIRouter()
 templates = Jinja2Templates(directory="view")
 
-@app.get("/")
+@router.get("/")
 async def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
-@app.post("/other")
+@router.post("/other")
 async def verify_other(file1: UploadFile = File(...), file2: UploadFile = File(...)):
     try:
         contents1 = await file1.read()
@@ -60,6 +57,3 @@ async def verify_other(file1: UploadFile = File(...), file2: UploadFile = File(.
 
     except Exception as e:
         return {"error": str(e)}
-    
-if __name__ == "__main__":
-    uvicorn.run("comp_other:app", port=8000, reload=True)
