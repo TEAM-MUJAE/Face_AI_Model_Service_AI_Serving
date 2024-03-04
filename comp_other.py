@@ -1,19 +1,26 @@
 from fastapi import FastAPI, File, UploadFile, Request, APIRouter
 from fastapi.templating import Jinja2Templates
+from fastapi.responses import FileResponse, JSONResponse
 from deepface.detectors import DetectorWrapper
 from deepface import DeepFace
 import numpy as np
 import cv2
+import io
 
 app = FastAPI()
-router = APIRouter()
 templates = Jinja2Templates(directory="view")
 
-@router.get("/")
+@app.get("/")
 async def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
-@router.post("/other")
+
+def show_image(img, window_name):
+    cv2.imshow(window_name, img)
+    cv2.waitKey(0)
+    cv2.destroyAllWindows()
+
+@app.post("/other")
 async def verify_other(file1: UploadFile = File(...), file2: UploadFile = File(...)):
     try:
         contents1 = await file1.read()
@@ -25,35 +32,54 @@ async def verify_other(file1: UploadFile = File(...), file2: UploadFile = File(.
         img1 = cv2.imdecode(nparr1, cv2.IMREAD_COLOR)
         img2 = cv2.imdecode(nparr2, cv2.IMREAD_COLOR)
 
-
         # 얼굴 감지
         faces1 = DetectorWrapper.detect_faces(img=img1, detector_backend='dlib')
         faces2 = DetectorWrapper.detect_faces(img=img2, detector_backend='dlib')
+        
+        print(type(faces1[0]))
+        print(dir(faces1[0]))
         
         # 각 이미지에서 감지된 얼굴 수 확인
         if len(faces1) > 1 or len(faces2) > 1:
             return {"error": "한 이미지에 두 명 이상의 인물이 검출되었습니다."}
         
-        # cropped_faces = []
+        
+        # 얼굴 크롭 및 저장
+        def facial_area(img, detected_face):
+            # 가정: detected_face 객체의 facial_area 속성은 FacialAreaRegion 객체이며,
+            # 이 객체는 x, y, w, h 속성을 가진다.
+            x = detected_face.facial_area.x
+            y = detected_face.facial_area.y
+            w = detected_face.facial_area.w
+            h = detected_face.facial_area.h
+            return img[y:y+h, x:x+w]
 
-        # # img1에서 감지된 얼굴 크롭
-        # for detected_face in faces1:
-        #     # 얼굴 위치 정보 추출 방식을 `DetectedFace` 객체의 실제 구조에 맞게 수정
-        #     x, y, w, h = detected_face['x'], detected_face['y'], detected_face['w'], detected_face['h']
-        #     cropped_face = img1[y:y+h, x:x+w]
-        #     cropped_faces.append(cropped_face)
 
-        # # img2에서 감지된 얼굴 크롭
-        # for detected_face in faces2:
-        #     # 얼굴 위치 정보 추출 방식을 `DetectedFace` 객체의 실제 구조에 맞게 수정
-        #     x, y, w, h = detected_face['x'], detected_face['y'], detected_face['w'], detected_face['h']
-        #     cropped_face = img2[y:y+h, x:x+w]
-        #     cropped_faces.append(cropped_face)
+        cropped_face1 = facial_area(img1, faces1[0])
+        cropped_face2 = facial_area(img2, faces2[0])
+        
 
+
+        # 크롭된 얼굴 이미지와 결과를 반환
+        _, encoded_img1 = cv2.imencode('.png', cropped_face1)
+        _, encoded_img2 = cv2.imencode('.png', cropped_face2)
+        encoded_img_bytes1 = encoded_img1.tobytes()
+        encoded_img_bytes2 = encoded_img2.tobytes()
+        
+        # 크롭된 얼굴 이미지 표시
+        show_image(cropped_face1, "Cropped Face 1")
+        show_image(cropped_face2, "Cropped Face 2")
 
         # 이미지 비교
-        result = DeepFace.verify(img1, img2, model_name='Facenet512', detector_backend='dlib', distance_metric='euclidean')
-        return result
+        result = DeepFace.verify(cropped_face1, cropped_face2, model_name='Facenet512', detector_backend='dlib', distance_metric='euclidean')
+        
+        # 결과와 이미지를 함께 반환
+        return {
+            "face1": FileResponse(io.BytesIO(encoded_img_bytes1), media_type='image/png'),
+            "face2": FileResponse(io.BytesIO(encoded_img_bytes2), media_type='image/png'),
+            "verification_result": result
+        }
 
     except Exception as e:
-        return {"error": str(e)}
+        return JSONResponse(content={"error": str(e)}, status_code=500)
+
