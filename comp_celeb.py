@@ -1,19 +1,21 @@
 from deepface import DeepFace
-from deepface.modules import verification
-import os
-from fastapi import FastAPI, File, UploadFile, HTTPException,Request
-from fastapi.responses import HTMLResponse,RedirectResponse
+from deepface.detectors import DetectorWrapper
+from fastapi import FastAPI, File, UploadFile,Request,APIRouter #,HTTPException
+from fastapi.responses import HTMLResponse,FileResponse #,RedirectResponse
 from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
-import uvicorn
+# from fastapi.staticfiles import StaticFiles
+import tensorflow as tf
+import os
 import shutil
 import pandas as pd
 import numpy as np
 import cv2
+import io
 
 templates = Jinja2Templates(directory="view")
 
 app = FastAPI()
+router = APIRouter()
 
 models = [
     "VGG-Face", 
@@ -48,35 +50,63 @@ temp_dir = "temp"
 if not os.path.exists(temp_dir):
     os.makedirs(temp_dir)
 
+# # 크롭된 이미지 확인
+# def show_image(img, window_name):
+#     cv2.imshow(window_name, img)
+#     cv2.waitKey(0)
+#     cv2.destroyAllWindows()
+    
+# 얼굴 크롭 및 저장
+def facial_area(img, detected_face):
+    # 이 객체는 x, y, w, h 속성을 가진다.
+    x = detected_face.facial_area.x
+    y = detected_face.facial_area.y
+    w = detected_face.facial_area.w
+    h = detected_face.facial_area.h
+    return img[y:y+h, x:x+w]
+
+# 유클리디안 거리 벡터를 히트맵으로 변환 및 저장
 def generate_heatmap(euclidean_distance_vector, filename):
-    # 유클리디안 거리 벡터를 히트맵으로 변환 및 저장
+    
     size = int(np.ceil(np.sqrt(len(euclidean_distance_vector))))
+    
     padded_vector = np.pad(euclidean_distance_vector, (0, size*size - len(euclidean_distance_vector)), 'constant', constant_values=(0, 0))
+    
     vector_2d = padded_vector.reshape((size, size))
+    
     normalized_vector = cv2.normalize(vector_2d, None, alpha=0, beta=255, norm_type=cv2.NORM_MINMAX).astype(np.uint8)
+    
     heatmap_img = cv2.applyColorMap(normalized_vector, cv2.COLORMAP_JET)
+    
     heatmap_path = os.path.join(temp_dir, filename)
+    
     cv2.imwrite(heatmap_path, heatmap_img)
     return heatmap_path
 
+# 유클리디안 거리 벡터 히트맵 이미지를 조회된 이미지에 오버레이 변환 및 저장
 def overlay_heatmap_on_image(original_image_path, heatmap_path, output_filename, alpha=1.0):
     original_image = cv2.imread(original_image_path)
+    
     heatmap = cv2.imread(heatmap_path)
+    
     heatmap_resized = cv2.resize(heatmap, (original_image.shape[1], original_image.shape[0]))
+    
     overlayed_image = cv2.addWeighted(original_image, 1-alpha, heatmap_resized, alpha, 0)
+    
     output_path = os.path.join(temp_dir, output_filename)
+    
     cv2.imwrite(output_path, overlayed_image)
     return output_path                     
 
-@app.get("/",response_class=HTMLResponse)
+@router.get("/",response_class=HTMLResponse)
 async def main(request : Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
-@app.post("/upload")
+@router.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
     
     temp_file_path = os.path.join(temp_dir, file.filename)
-
+    
     # print("start")
     # print("temdir",temp_dir)
     # print("temdir",file.filename)
@@ -88,8 +118,32 @@ async def upload_file(file: UploadFile = File(...)):
     
         
     try:
+        # 각 이미지에서 2개 이상 얼굴 감지 시 예외 처리
+        content = cv2.imread(temp_file_path)
+        # print("content is",content)
+        
+        # 얼굴 감지
+        face = DetectorWrapper.detect_faces(img=content, detector_backend='dlib')
+        
+        # print("face 값 확인",face)
+        # print("face[0] 값 확인",face[0])
+        # print("face[0] 타입 확인",type(face[0]))
+        # dir 내장 함수 : 어떤 객체를 인자로 넣어주면 해당 객체가 어떤 변수와 메소드(method)를 가지고 있는지 나열
+        # print(dir(face[0]))
+        
+        # 각 이미지에서 감지된 얼굴 수 확인
+        if len(face) > 1 :
+            return {"error": "한 이미지에 두 명 이상의 인물이 검출되었습니다."}
+
+
+        cropped_face = facial_area(content, face[0])
+        
+        # # 크롭된 얼굴 이미지 표시 확인
+        # show_image(cropped_face, "Cropped Face")
+        
         # DeepFace.find 호출하여 유사한 얼굴 찾기
-        dfs = DeepFace.find(img_path=temp_file_path,
+        dfs = DeepFace.find(#img_path= temp_file_path,
+                            img_path= cropped_face,
                             db_path=db_path,
                             model_name=models[2],  # Facenet512
                             distance_metric=metrics[1],  # euclidean
@@ -98,11 +152,6 @@ async def upload_file(file: UploadFile = File(...)):
                             )        
 
         # print("Dfs",dfs)
-        
-        original_image = cv2.imread(temp_file_path)
-        # print("00. original_image",original_image)
-        original_shape = original_image.shape[:2]  # (height, width)
-        # print("00. original_shape",original_shape)
         
         # dfs가 리스트이고 리스트의 첫 번째 요소가 DataFrame인지 확인
         if isinstance(dfs, list) and len(dfs) > 0 and isinstance(dfs[0], pd.DataFrame):
@@ -116,7 +165,10 @@ async def upload_file(file: UploadFile = File(...)):
             # 결과 정보 추출
                 paths = top_similar_faces['identity'].tolist()  # 이미지 경로 리스트로 변환
                 distances = top_similar_faces['distance'].tolist()  # 거리 값 리스트로 변환
+                
                 heatmap_paths = [] # 히트맵 경로 초기화
+                overlay_paths = [] # 오버레이 이미지 경로 초기화
+                cropped_file_paths = [] # 크롭된 이미지 경로 초기화
 
                 for index, row in top_similar_faces.iterrows():
                     identity_path = row['identity']
@@ -152,14 +204,26 @@ async def upload_file(file: UploadFile = File(...)):
                     
                     output_filename = f"overlayed_{index}.png"  # 오버레이된 이미지의 파일명
                     overlay_path = overlay_heatmap_on_image(identity_path, heatmap_path, output_filename, alpha=0.6)
-                    print(f"Overlayed image saved to: {overlay_path}")
+                    overlay_paths.append(overlay_path)
+                    # print(f"Overlayed image saved to: {overlay_path}")
+                    
+                    # 크롭된 이미지 저장
+                    cropped_filename = f"cropped_{file.filename}"  # 크롭된 이미지 파일명 정의
+                    cropped_file_path = os.path.join(temp_dir, cropped_filename)  # 저장 경로 조합
+                    cv2.imwrite(cropped_file_path, cropped_face)  # 이미지 저장
+                    cropped_file_paths.append(cropped_file_path)
 
                     # print("Top similar faces paths:", paths)
                     # print("Distances:", distances)
                     # print("Heatmap paths:", heatmap_paths)
             
                 # 결과 반환
-                return {"top_similar_faces_paths": paths, "distances": distances, "heatmap_paths": heatmap_paths}
+                return {"top_similar_faces_paths": paths, 
+                        "distances": distances, 
+                        "heatmap_paths": heatmap_paths , 
+                        "overlay_paths" : overlay_paths, 
+                        "cropped_file_paths" : cropped_file_path,
+                        }
             else:
                 return {"message": "No similar faces found."}
         else:
@@ -172,6 +236,3 @@ async def upload_file(file: UploadFile = File(...)):
     finally:
         if os.path.exists(temp_file_path):
             os.remove(temp_file_path)
-
-if __name__ == "__main__":
-    uvicorn.run("comp_celeb:app", port=8000,reload=True)
