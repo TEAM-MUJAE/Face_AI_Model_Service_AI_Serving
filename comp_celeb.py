@@ -11,6 +11,8 @@ import pandas as pd
 import numpy as np
 import cv2
 import dlib
+import math
+import base64
 
 
 templates = Jinja2Templates(directory="view")
@@ -198,7 +200,12 @@ def match_and_visualize_sift_features(base_image_path, compare_image_paths, dete
         output_path = os.path.join(output_dir, f"{filename_prefix}_matched.jpg")
         cv2.imwrite(output_path, matched_img)
         print(f"Saved matched image to {output_path}")
-        return output_path
+        
+        # 결과 이미지를 base64로 인코딩
+        retval, buffer = cv2.imencode('.jpg', matched_img)
+        encoded_image = base64.b64encode(buffer).decode('utf-8')
+        
+        return encoded_image
 
 # 바운더리 박스 내의 특징점만 필터링하는 함수
 def filter_keypoints_by_feature_boxes(keypoints, descriptors, feature_boxes):
@@ -248,7 +255,7 @@ def calculate_feature_similarity(base_image_path, compare_image_paths, feature, 
         # 좋은 매치 필터링하여 평균 거리 계산
         good_matches = [m for m, n in matches if m.distance < 1 * n.distance]
         if good_matches:
-            average_distance = sum(m.distance for m in good_matches) / len(good_matches)
+            average_distance = math.sqrt(sum(m.distance for m in good_matches) / len(good_matches))
         else:
             average_distance = float('inf')  # 매치가 없는 경우, 평균 거리를 무한대로 설정
         
@@ -256,6 +263,7 @@ def calculate_feature_similarity(base_image_path, compare_image_paths, feature, 
 
     # 평균 거리(유사도 점수)에 따라 순위를 매기고 반환 (값이 작을수록 더 유사)
     ranked_scores = sorted(compare_scores, key=lambda x: x[1])
+    # print(f"Ranked scores for {feature}:", ranked_scores)
     return ranked_scores
 
 @router.get("/",response_class=HTMLResponse)
@@ -326,16 +334,26 @@ async def upload_file(file: UploadFile = File(...)):
                 paths = top_similar_faces['identity'].tolist()  # 이미지 경로 리스트로 변환
                 distances = top_similar_faces['distance'].tolist()  # 거리 값 리스트로 변환
                 
+                total_similar_faces = []
                 cropped_file_paths = [] # 크롭된 이미지 경로 초기화
                 landmark_paths = [] # 랜드마크된 이미지 경로 초기화
                 landmark_sift_paths= [] # 랜드마크된 이미지 값 초기화
-                socore_distances= [] # 눈,코,입 유사도 값 초기화
+                left_eyes_socore_distances= [] # 눈,코,입 유사도 값 초기화
+                right_eyes_socore_distances= [] # 눈,코,입 유사도 값 초기화
+                nose_socore_distances= [] # 눈,코,입 유사도 값 초기화
+                mouth_socore_distances= [] # 눈,코,입 유사도 값 초기화
+                
+                for path, distance in zip(paths, distances):
+                    total_similar_faces.append([path, distance])
+                
+                # 결과 출력
+                print(total_similar_faces)
                 
                 for _, row in top_similar_faces.iterrows():
                     identity_path = row['identity']
                     
                     # 각 상위 유사 이미지에 대해 SIFT 적용
-                    print("identity_path is",identity_path)
+                    # print("identity_path is",identity_path)
                     
                     filename_prefix = os.path.splitext(os.path.basename(identity_path))[0]
 
@@ -357,15 +375,21 @@ async def upload_file(file: UploadFile = File(...)):
                     
                     
                     left_eye_similarity_rankings = calculate_feature_similarity(temp_file_path, [identity_path], 'left_eye', detector, predictor, sift, temp_dir)
-                    # right_eye_similarity_rankings = calculate_feature_similarity(temp_file_path, [identity_path], 'right_eye', detector, predictor, sift, temp_dir)
-                    # nose_similarity_rankings = calculate_feature_similarity(temp_file_path, [identity_path], 'nose', detector, predictor, sift, temp_dir)
-                    # mouth_similarity_rankings = calculate_feature_similarity(temp_file_path, [identity_path], 'mouth', detector, predictor, sift, temp_dir)
-
-                    socore_distances.append("left_eye_similarity_distances")
-                    socore_distances.append(left_eye_similarity_rankings)
-                    # socore_distances.append(right_similarity_rankings)
-                    # socore_distances.append(nose_similarity_rankings)
-                    # socore_distances.append(mouth_similarity_rankings)
+                    right_eye_similarity_rankings = calculate_feature_similarity(temp_file_path, [identity_path], 'right_eye', detector, predictor, sift, temp_dir)
+                    nose_similarity_rankings = calculate_feature_similarity(temp_file_path, [identity_path], 'nose', detector, predictor, sift, temp_dir)
+                    mouth_similarity_rankings = calculate_feature_similarity(temp_file_path, [identity_path], 'mouth', detector, predictor, sift, temp_dir)
+                    
+                    for ranking in left_eye_similarity_rankings:
+                        left_eyes_socore_distances.append(ranking)
+                        
+                    for ranking in right_eye_similarity_rankings:
+                        right_eyes_socore_distances.append(ranking)
+                        
+                    for ranking in nose_similarity_rankings:
+                        nose_socore_distances.append(ranking)
+                        
+                    for ranking in mouth_similarity_rankings:
+                        mouth_socore_distances.append(ranking)
                     
                     # 크롭된 이미지 저장
                     cropped_filename = f"cropped_{file.filename}"  # 크롭된 이미지 파일명 정의
@@ -375,12 +399,15 @@ async def upload_file(file: UploadFile = File(...)):
                     
             
                 # 결과 반환
-                return {"top_similar_faces_paths": paths,
-                        "distances": distances,
-                        "cropped_file_paths" : cropped_file_path,
-                        "landmark_paths" : landmark_paths,
+                return {
+                        "total_similar_faces": total_similar_faces,
+                        # "cropped_file_paths" : cropped_file_path,
+                        # "landmark_paths" : landmark_paths,
                         "landmark_sift_paths" : landmark_sift_paths,
-                        "socore_distances" : socore_distances,
+                        "left_eyes_socore_distances" : left_eyes_socore_distances,
+                        "right_eyes_socore_distances" : right_eyes_socore_distances,
+                        "nose_socore_distances" : nose_socore_distances,
+                        "mouth_socore_distances" : mouth_socore_distances,
                         }
             else:
                 return {"message": "No similar faces found."}
