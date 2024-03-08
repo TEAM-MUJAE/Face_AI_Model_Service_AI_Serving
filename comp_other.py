@@ -8,9 +8,10 @@ import cv2
 import io
 
 app = FastAPI()
+router = APIRouter()
 templates = Jinja2Templates(directory="view")
 
-@app.get("/")
+@router.get("/")
 async def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
@@ -20,7 +21,7 @@ def show_image(img, window_name):
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
-@app.post("/other")
+@router.post("/other")
 async def verify_other(file1: UploadFile = File(...), file2: UploadFile = File(...)):
     try:
         contents1 = await file1.read()
