@@ -117,13 +117,16 @@ def match_and_visualize_sift_features(base_image_path, compare_image_paths, dete
     결과로 5장의 이미지가 생성되며, 각 이미지는 기준 이미지와 한 비교 이미지 사이의 매칭을 보여줍니다.
     """
 
+    # 결과 이미지 경로들을 저장할 리스트
+    encoded_images = []
+    
     base_image = cv2.imread(base_image_path)
     gray_base = cv2.cvtColor(base_image, cv2.COLOR_BGR2GRAY)
     faces_base = detector(gray_base)
     if not faces_base:
         print("No faces detected in the base image.")
         return
-
+    
     landmarks_base = predictor(gray_base, faces_base[0])
     feature_boxes_base = calculate_feature_boxes(landmarks_base)  # 기준 이미지의 바운더리 박스 계산
     base_image_with_boxes = draw_feature_boxes(base_image.copy(), feature_boxes_base)
@@ -134,11 +137,11 @@ def match_and_visualize_sift_features(base_image_path, compare_image_paths, dete
         compare_image = cv2.imread(compare_image_path)
         gray_compare = cv2.cvtColor(compare_image, cv2.COLOR_BGR2GRAY)
         faces_compare = detector(gray_compare)
-
+        
         if len(faces_compare) == 0:
             print(f"No faces detected in image {idx}.")
             continue
-
+        
         landmarks_compare = predictor(gray_compare, faces_compare[0])
         feature_boxes_compare = calculate_feature_boxes(landmarks_compare)  # 비교 이미지의 바운더리 박스 계산
         draw_feature_boxes(compare_image, feature_boxes_compare)  # 비교 이미지에 바운더리 박스를 그림
@@ -158,12 +161,16 @@ def match_and_visualize_sift_features(base_image_path, compare_image_paths, dete
         output_path = os.path.join(output_dir, f"{filename_prefix}_matched.jpg")
         cv2.imwrite(output_path, matched_img)
         print(f"Saved matched image to {output_path}")
-
+        
         # 결과 이미지를 base64로 인코딩
         retval, buffer = cv2.imencode('.jpg', matched_img)
         encoded_image = base64.b64encode(buffer).decode('utf-8')
-
-        return encoded_image
+        image_name = f"{filename_prefix}"  # 이미지 이름 생성
+        print(f"image_name",image_name)
+        # print(f"Encoded matched image to base64",encoded_image)
+        encoded_images.append((image_name, encoded_image))
+        
+    return encoded_images
 
 def calculate_feature_similarity(base_image_path, compare_image_paths, feature, detector, predictor, sift, output_dir):
     """
@@ -264,7 +271,6 @@ async def verify_other(file1: UploadFile = File(...), file2: UploadFile = File(.
         # # 크롭된 얼굴 이미지 표시
         # show_image(cropped_face1, "Cropped Face 1")
         # show_image(cropped_face2, "Cropped Face 2")
-
 
 
         temp_file_path1 = os.path.join(temp_dir, file1.filename)
