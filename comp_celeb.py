@@ -313,6 +313,7 @@ async def upload_file(file: UploadFile = File(...)):
 
         cropped_face = facial_area(content, face[0])
         
+        
         # DeepFace.find 호출하여 유사한 얼굴 찾기
         dfs = DeepFace.find(
                             img_path= cropped_face,
@@ -352,6 +353,26 @@ async def upload_file(file: UploadFile = File(...)):
                 
                 # 결과 출력
                 print(total_similar_faces)
+                
+                print("cropped_face",cropped_face)
+                
+                # 크롭된 이미지 저장
+                cropped_filename1 = f"cropped_{file.filename}"  # 크롭된 이미지 파일명 정의
+                cropped_filename2 = f"{file.filename}"  # 크롭된 이미지 파일명 정의
+                cropped_file_path1 = os.path.join(temp_dir, cropped_filename1)  # 저장 경로 조합
+                cropped_file_path2 = os.path.join(temp_dir, cropped_filename2)  # 저장 경로 조합
+                cv2.imwrite(cropped_file_path1, cropped_face)  # 이미지 저장
+                # cropped_file_paths.append(cropped_file_path)
+                
+                cropped_filename_prefix = os.path.splitext(os.path.basename(cropped_file_path2))[0]
+                
+                # 결과 이미지를 base64로 인코딩
+                retval, buffer = cv2.imencode('.jpg', cropped_face)
+                encoded_cropped_image = base64.b64encode(buffer).decode('utf-8')
+                cropped_image_name = f"{cropped_filename_prefix}"  # 이미지 이름 생성
+                print(f"cropped_image_name",cropped_image_name)
+                                
+                cropped_file_paths.append((cropped_image_name, encoded_cropped_image))
                 
                 for _, row in top_similar_faces.iterrows():
                     identity_path = row['identity']
@@ -394,19 +415,12 @@ async def upload_file(file: UploadFile = File(...)):
                         
                     for ranking in mouth_similarity_rankings:
                         mouth_socore_distances.append(ranking)
-
-                    
-                    # 크롭된 이미지 저장
-                    cropped_filename = f"cropped_{file.filename}"  # 크롭된 이미지 파일명 정의
-                    cropped_file_path = os.path.join(temp_dir, cropped_filename)  # 저장 경로 조합
-                    cv2.imwrite(cropped_file_path, cropped_face)  # 이미지 저장
-                    cropped_file_paths.append(cropped_file_path)
-                    
             
                 # 결과 반환
                 return {
                         "total_similar_faces": total_similar_faces,
-                        # "cropped_file_paths" : cropped_file_path,
+                        "cropped_file_paths" : cropped_file_paths,
+                        "cropped_file_path1" : cropped_file_path1,
                         # "landmark_paths" : landmark_paths,
                         "landmark_sift_paths" : landmark_sift_paths,
                         "left_eyes_socore_distances" : left_eyes_socore_distances,
