@@ -111,35 +111,37 @@ def draw_feature_boxes(image, feature_boxes):
     #     cv2.rectangle(image, (int(box[0]), int(box[1])), (int(box[2]), int(box[3])), (0, 255, 0), 2)
     return image
 
-def match_and_visualize_sift_features(base_image_path, compare_image_paths, detector, predictor, sift, output_dir, filename_prefix):
+def match_and_visualize_sift_features(base_image_path, compare_image_paths, detector, predictor, sift, output_dir,filename_prefix):
     """
     기준 이미지와 비교 이미지 간의 SIFT 특징점을 매칭하고 시각화합니다.
-    결과로 각 비교 이미지에 대한 매칭 결과 이미지의 경로를 저장한 리스트를 반환합니다.
+    결과로 5장의 이미지가 생성되며, 각 이미지는 기준 이미지와 한 비교 이미지 사이의 매칭을 보여줍니다.
     """
 
+    # 결과 이미지 경로들을 저장할 리스트
+    encoded_images = []
+    
     base_image = cv2.imread(base_image_path)
     gray_base = cv2.cvtColor(base_image, cv2.COLOR_BGR2GRAY)
     faces_base = detector(gray_base)
     if not faces_base:
         print("No faces detected in the base image.")
         return
-
+    
     landmarks_base = predictor(gray_base, faces_base[0])
     feature_boxes_base = calculate_feature_boxes(landmarks_base)  # 기준 이미지의 바운더리 박스 계산
     base_image_with_boxes = draw_feature_boxes(base_image.copy(), feature_boxes_base)
     base_filtered_kps, base_filtered_descs = get_filtered_keypoints_and_descriptors(base_image_with_boxes, sift, feature_boxes_base)  # 필터링된 특징점 추출
 
-    landmark_sift_results = []  # 각 비교 이미지에 대한 매칭 결과 이미지의 경로를 저장할 리스트
 
     for idx, compare_image_path in enumerate(compare_image_paths):
         compare_image = cv2.imread(compare_image_path)
         gray_compare = cv2.cvtColor(compare_image, cv2.COLOR_BGR2GRAY)
         faces_compare = detector(gray_compare)
-
+        
         if len(faces_compare) == 0:
             print(f"No faces detected in image {idx}.")
             continue
-
+        
         landmarks_compare = predictor(gray_compare, faces_compare[0])
         feature_boxes_compare = calculate_feature_boxes(landmarks_compare)  # 비교 이미지의 바운더리 박스 계산
         draw_feature_boxes(compare_image, feature_boxes_compare)  # 비교 이미지에 바운더리 박스를 그림
@@ -156,16 +158,19 @@ def match_and_visualize_sift_features(base_image_path, compare_image_paths, dete
         matched_img = cv2.drawMatches(base_image, base_filtered_kps, compare_image, compare_filtered_kps, good_matches, None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
 
         # 결과 이미지 저장
-        output_path = os.path.join(output_dir, f"{filename_prefix}_matched_{idx}.jpg")
+        output_path = os.path.join(output_dir, f"{filename_prefix}_matched.jpg")
         cv2.imwrite(output_path, matched_img)
         print(f"Saved matched image to {output_path}")
-
+        
         # 결과 이미지를 base64로 인코딩
         retval, buffer = cv2.imencode('.jpg', matched_img)
         encoded_image = base64.b64encode(buffer).decode('utf-8')
-        landmark_sift_results.append(encoded_image)
-
-    return landmark_sift_results
+        image_name = f"{filename_prefix}"  # 이미지 이름 생성
+        print(f"image_name",image_name)
+        # print(f"Encoded matched image to base64",encoded_image)
+        encoded_images.append((image_name, encoded_image))
+        
+    return encoded_images
 
 
 
@@ -312,12 +317,12 @@ async def compare_faces(file1: UploadFile = File(...), file2: UploadFile = File(
         mouth_similarity = []
         
         # 파일 1과 파일 2 간의 매칭 및 시각화
-        landmark_sift_paths1 = match_and_visualize_sift_features(temp_file_path1, [temp_file_path2,  temp_file_path3], detector, predictor, sift, temp_dir, os.path.splitext(os.path.basename(temp_file_path1))[0])
+        landmark_sift_paths1 = match_and_visualize_sift_features(temp_file_path1, [temp_file_path2], detector, predictor, sift, temp_dir, os.path.splitext(os.path.basename(temp_file_path1))[0])
         if landmark_sift_paths1:
             landmark_sift_paths.extend(landmark_sift_paths1)
 
         # 파일 1과 파일 3 간의 매칭 및 시각화
-        landmark_sift_paths2 = match_and_visualize_sift_features(temp_file_path1, [temp_file_path3,  temp_file_path2], detector, predictor, sift, temp_dir, os.path.splitext(os.path.basename(temp_file_path1))[0])
+        landmark_sift_paths2 = match_and_visualize_sift_features(temp_file_path1, [temp_file_path3, temp_file_path2], detector, predictor, sift, temp_dir, os.path.splitext(os.path.basename(temp_file_path1))[0])
         if landmark_sift_paths2:
             landmark_sift_paths.extend(landmark_sift_paths2)
 
