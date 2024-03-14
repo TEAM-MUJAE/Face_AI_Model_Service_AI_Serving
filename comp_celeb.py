@@ -14,10 +14,6 @@ import dlib
 import math
 import base64
 
-
-templates = Jinja2Templates(directory="view")
-
-app = FastAPI()
 router = APIRouter()
 
 models = [
@@ -46,7 +42,21 @@ backends = [
 
 metrics = ["cosine", "euclidean", "euclidean_l2"]
 
-db_path = r"C:\img_for_ai"  # 연예인 데이터 경로
+# 연예인 데이터 디렉토리 이름
+db_dirname = "img_for_ai"
+
+# 운영 체제에 따라 최상위 디렉토리 설정
+if os.name == "nt":  # Windows
+    top_dir = "C:/"
+elif os.name == "posix":  # macOS or Linux
+    top_dir = "/"
+
+print("top_dir",top_dir)
+
+# 연예인 데이터 경로
+db_path = os.path.join(top_dir, db_dirname)
+
+print("db_path",db_path)
 
 predictor_path = "models/shape_predictor_68_face_landmarks.dat"  # 랜드마크 모델 파일 경로
 predictor = dlib.shape_predictor(predictor_path)
@@ -159,6 +169,9 @@ def match_and_visualize_sift_features(base_image_path, compare_image_paths, dete
     결과로 5장의 이미지가 생성되며, 각 이미지는 기준 이미지와 한 비교 이미지 사이의 매칭을 보여줍니다.
     """
 
+    # 결과 이미지 경로들을 저장할 리스트
+    encoded_images = []
+    
     base_image = cv2.imread(base_image_path)
     gray_base = cv2.cvtColor(base_image, cv2.COLOR_BGR2GRAY)
     faces_base = detector(gray_base)
@@ -204,30 +217,34 @@ def match_and_visualize_sift_features(base_image_path, compare_image_paths, dete
         # 결과 이미지를 base64로 인코딩
         retval, buffer = cv2.imencode('.jpg', matched_img)
         encoded_image = base64.b64encode(buffer).decode('utf-8')
+        image_name = f"{filename_prefix}"  # 이미지 이름 생성
+        print(f"image_name",image_name)
+        # print(f"Encoded matched image to base64",encoded_image)
+        encoded_images.append((image_name, encoded_image))
         
-        return encoded_image
+    return encoded_images
 
-# 바운더리 박스 내의 특징점만 필터링하는 함수
-def filter_keypoints_by_feature_boxes(keypoints, descriptors, feature_boxes):
-    filtered_keypoints = []
-    filtered_descriptors = []
-    for kp, desc in zip(keypoints, descriptors):
-        x, y = kp.pt
-        for box in feature_boxes.values():
-            x_min, y_min, x_max, y_max = box
-            if x_min <= x <= x_max and y_min <= y <= y_max:
-                filtered_keypoints.append(kp)
-                filtered_descriptors.append(desc)
-                break
-    for kp, desc in zip(keypoints, descriptors):
-        x, y = kp.pt
-        for box in feature_boxes.values():
-            x_min, y_min, x_max, y_max = box
-            if x_min <= x <= x_max and y_min <= y <= y_max:
-                filtered_keypoints.append(kp)
-                filtered_descriptors.append(desc)
-                break
-    return filtered_keypoints, np.array(filtered_descriptors)
+# # 바운더리 박스 내의 특징점만 필터링하는 함수
+# def filter_keypoints_by_feature_boxes(keypoints, descriptors, feature_boxes):
+#     filtered_keypoints = []
+#     filtered_descriptors = []
+#     for kp, desc in zip(keypoints, descriptors):
+#         x, y = kp.pt
+#         for box in feature_boxes.values():
+#             x_min, y_min, x_max, y_max = box
+#             if x_min <= x <= x_max and y_min <= y <= y_max:
+#                 filtered_keypoints.append(kp)
+#                 filtered_descriptors.append(desc)
+#                 break
+#     for kp, desc in zip(keypoints, descriptors):
+#         x, y = kp.pt
+#         for box in feature_boxes.values():
+#             x_min, y_min, x_max, y_max = box
+#             if x_min <= x <= x_max and y_min <= y <= y_max:
+#                 filtered_keypoints.append(kp)
+#                 filtered_descriptors.append(desc)
+#                 break
+#     return filtered_keypoints, np.array(filtered_descriptors)
 
 def calculate_feature_similarity(base_image_path, compare_image_paths, feature, detector, predictor, sift, output_dir):
     """
@@ -263,21 +280,17 @@ def calculate_feature_similarity(base_image_path, compare_image_paths, feature, 
 
     # 평균 거리(유사도 점수)에 따라 순위를 매기고 반환 (값이 작을수록 더 유사)
     ranked_scores = sorted(compare_scores, key=lambda x: x[1])
-    # print(f"Ranked scores for {feature}:", ranked_scores)
+
     return ranked_scores
 
-@router.get("/",response_class=HTMLResponse)
-async def main(request : Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+# @router.get("/",response_class=HTMLResponse)
+# async def main(request : Request):
+#     return templates.TemplateResponse("index.html", {"request": request})
 
 @router.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
     
     temp_file_path = os.path.join(temp_dir, file.filename)
-    
-    # print("start")
-    # print("temdir",temp_dir)
-    # print("temdir",file.filename)
 
     with open(temp_file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
@@ -294,23 +307,14 @@ async def upload_file(file: UploadFile = File(...)):
         # 얼굴 감지
         face = DetectorWrapper.detect_faces(img=content, detector_backend='dlib')
         
-        # print("face 값 확인",face)
-        # print("face[0] 값 확인",face[0])
-        # print("face[0] 타입 확인",type(face[0]))
-        # dir 내장 함수 : 어떤 객체를 인자로 넣어주면 해당 객체가 어떤 변수와 메소드(method)를 가지고 있는지 나열
-        # print(dir(face[0]))
-        
         # 각 이미지에서 감지된 얼굴 수 확인
         if len(face) > 1 :
             return JSONResponse(content={"error": "한 이미지에 두 명 이상의 인물이 검출되었습니다."}, status_code=400)
 
         cropped_face = facial_area(content, face[0])
         
-        # # 크롭된 얼굴 이미지 표시 확인
-        # show_image(cropped_face, "Cropped Face")
-        
         # DeepFace.find 호출하여 유사한 얼굴 찾기
-        dfs = DeepFace.find(#img_path= temp_file_path,
+        dfs = DeepFace.find(
                             img_path= cropped_face,
                             db_path=db_path,
                             model_name=models[2],  # Facenet512
@@ -353,10 +357,10 @@ async def upload_file(file: UploadFile = File(...)):
                     identity_path = row['identity']
                     
                     # 각 상위 유사 이미지에 대해 SIFT 적용
-                    # print("identity_path is",identity_path)
+                    print("identity_path is",identity_path)
                     
                     filename_prefix = os.path.splitext(os.path.basename(identity_path))[0]
-
+                    print("filename_prefix is",filename_prefix)
                     
                     landmark_path = save_landmarked_images_with_sift(identity_path, detector, predictor, temp_dir, filename_prefix, {})
                     
@@ -364,8 +368,8 @@ async def upload_file(file: UploadFile = File(...)):
                     
                     landmark_sift_path = match_and_visualize_sift_features(temp_file_path, [identity_path], detector, predictor,sift,temp_dir,filename_prefix)
                     
-                    print("landmark_path is",landmark_path)
-                    print("landmark_sift_path is",landmark_sift_path)
+                    # print("landmark_path is",landmark_path)
+                    # print("landmark_sift_path is",landmark_sift_path)
                     
                     if landmark_path:
                         landmark_paths.append(landmark_path)
@@ -390,6 +394,7 @@ async def upload_file(file: UploadFile = File(...)):
                         
                     for ranking in mouth_similarity_rankings:
                         mouth_socore_distances.append(ranking)
+
                     
                     # 크롭된 이미지 저장
                     cropped_filename = f"cropped_{file.filename}"  # 크롭된 이미지 파일명 정의
