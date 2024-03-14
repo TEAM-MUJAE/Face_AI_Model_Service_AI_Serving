@@ -221,6 +221,11 @@ def calculate_feature_similarity(base_image_path, compare_image_paths, feature, 
 async def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
+# 임시 파일로 저장한 이미지를 base64로 인코딩하여 상대 경로로 변환하는 함수
+def get_encoded_image(image_path):
+    with open(image_path, "rb") as img_file:
+        encoded_string = base64.b64encode(img_file.read()).decode("utf-8")
+    return encoded_string
     
 @router.post("/people")
 async def compare_faces(file1: UploadFile = File(...), file2: UploadFile = File(...), file3: UploadFile = File(...)):
@@ -294,15 +299,20 @@ async def compare_faces(file1: UploadFile = File(...), file2: UploadFile = File(
         # 임시 파일로 저장
         with NamedTemporaryFile(dir=temp_dir, delete=False, suffix=".png") as temp_file1:
             temp_file1.write(cv2.imencode('.png', cropped_face1)[1])
-            temp_file_path1 = temp_file1.name
+            temp_file_path1 = os.path.relpath(temp_file1.name, start=os.getcwd())
         
         with NamedTemporaryFile(dir=temp_dir, delete=False, suffix=".png") as temp_file2:
             temp_file2.write(cv2.imencode('.png', cropped_face2)[1])
-            temp_file_path2 = temp_file2.name
+            temp_file_path2 = os.path.relpath(temp_file2.name, start=os.getcwd())
 
         with NamedTemporaryFile(dir=temp_dir, delete=False, suffix=".png") as temp_file3:
             temp_file3.write(cv2.imencode('.png', cropped_face3)[1])
-            temp_file_path3 = temp_file3.name
+            temp_file_path3 = os.path.relpath(temp_file3.name, start=os.getcwd())
+        
+        # 이미지를 base64로 인코딩하여 상대 경로로 출력
+        encoded_img1 = get_encoded_image(temp_file_path1)
+        encoded_img2 = get_encoded_image(temp_file_path2)    
+        encoded_img3 = get_encoded_image(temp_file_path3)    
             
         # filename_prefix1 = os.path.splitext(os.path.basename(temp_file_path1))[0]
         # filename_prefix2 = os.path.splitext(os.path.basename(temp_file_path2))[0]
@@ -345,9 +355,12 @@ async def compare_faces(file1: UploadFile = File(...), file2: UploadFile = File(
             "right_eye_similarity": right_eye_similarity,
             "nose_similarity": nose_similarity,
             "mouth_similarity": mouth_similarity,
-            "face1": FileResponse(io.BytesIO(encoded_img_bytes1), media_type='image/png'),
-            "face2": FileResponse(io.BytesIO(encoded_img_bytes2), media_type='image/png'),
-            "face3": FileResponse(io.BytesIO(encoded_img_bytes3), media_type='image/png'),
+            # "face1": FileResponse(io.BytesIO(encoded_img_bytes1), media_type='image/png'),
+            # "face2": FileResponse(io.BytesIO(encoded_img_bytes2), media_type='image/png'),
+            # "face3": FileResponse(io.BytesIO(encoded_img_bytes3), media_type='image/png'),
+            "encoded_img1": encoded_img1, 
+            "encoded_img2": encoded_img2,
+            "encoded_img3": encoded_img3,
             "result1": result1, 
             "result2": result2
         }

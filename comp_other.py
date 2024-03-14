@@ -221,6 +221,12 @@ async def read_root(request: Request):
 #     cv2.waitKey(0)
 #     cv2.destroyAllWindows()
 
+# 임시 파일로 저장한 이미지를 base64로 인코딩하여 상대 경로로 변환하는 함수
+def get_encoded_image(image_path):
+    with open(image_path, "rb") as img_file:
+        encoded_string = base64.b64encode(img_file.read()).decode("utf-8")
+    return encoded_string
+
 @router.post("/other")
 async def verify_other(file1: UploadFile = File(...), file2: UploadFile = File(...)):
     try:
@@ -275,15 +281,20 @@ async def verify_other(file1: UploadFile = File(...), file2: UploadFile = File(.
 
         temp_file_path1 = os.path.join(temp_dir, file1.filename)
         temp_file_path2 = os.path.join(temp_dir, file2.filename)
-
+        
         # 임시 파일로 저장
         with NamedTemporaryFile(dir=temp_dir, delete=False, suffix=".png") as temp_file1:
             temp_file1.write(cv2.imencode('.png', cropped_face1)[1])
-            temp_file_path1 = temp_file1.name
+            temp_file_path1 = os.path.relpath(temp_file1.name, start=os.getcwd())
         
         with NamedTemporaryFile(dir=temp_dir, delete=False, suffix=".png") as temp_file2:
             temp_file2.write(cv2.imencode('.png', cropped_face2)[1])
-            temp_file_path2 = temp_file2.name
+            temp_file_path2 = os.path.relpath(temp_file2.name, start=os.getcwd())
+        
+        # 이미지를 base64로 인코딩하여 상대 경로로 출력
+        encoded_img1 = get_encoded_image(temp_file_path1)
+        encoded_img2 = get_encoded_image(temp_file_path2)    
+
 
         filename_prefix1 = os.path.splitext(os.path.basename(temp_file_path1))[0]
         filename_prefix2 = os.path.splitext(os.path.basename(temp_file_path2))[0]
@@ -318,6 +329,8 @@ async def verify_other(file1: UploadFile = File(...), file2: UploadFile = File(.
             "mouth_similarity": mouth_similarity,
             # "face1": FileResponse(io.BytesIO(encoded_img_bytes1), media_type='image/png'),
             # "face2": FileResponse(io.BytesIO(encoded_img_bytes2), media_type='image/png'),
+            "encoded_img1":encoded_img1,
+            "encoded_img2":encoded_img2,
             "verification_result": result
         }
 
