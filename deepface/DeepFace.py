@@ -53,8 +53,8 @@ def build_model(model_name: str) -> Any:
 
 
 def verify(
-    img1_path: Union[str, np.ndarray],
-    img2_path: Union[str, np.ndarray],
+    img1_path: Union[str, np.ndarray, List[float]],
+    img2_path: Union[str, np.ndarray, List[float]],
     model_name: str = "VGG-Face",
     detector_backend: str = "opencv",
     distance_metric: str = "cosine",
@@ -62,18 +62,21 @@ def verify(
     align: bool = True,
     expand_percentage: int = 0,
     normalization: str = "base",
+    silent: bool = False,
 ) -> Dict[str, Any]:
     """
     Verify if an image pair represents the same person or different persons.
     Args:
-        img1_path (str or np.ndarray): Path to the first image. Accepts exact image path
-            as a string, numpy array (BGR), or base64 encoded images.
+        img1_path (str or np.ndarray or List[float]): Path to the first image.
+            Accepts exact image path as a string, numpy array (BGR), base64 encoded images
+            or pre-calculated embeddings.
 
-        img2_path (str or np.ndarray): Path to the second image. Accepts exact image path
-            as a string, numpy array (BGR), or base64 encoded images.
+        img2_path (str or np.ndarray or List[float]): Path to the second image.
+            Accepts exact image path as a string, numpy array (BGR), base64 encoded images
+            or pre-calculated embeddings.
 
         model_name (str): Model for face recognition. Options: VGG-Face, Facenet, Facenet512,
-            OpenFace, DeepFace, DeepID, Dlib, ArcFace and SFace (default is VGG-Face).
+            OpenFace, DeepFace, DeepID, Dlib, ArcFace, SFace and GhostFaceNet (default is VGG-Face).
 
         detector_backend (string): face detector backend. Options: 'opencv', 'retinaface',
             'mtcnn', 'ssd', 'dlib', 'mediapipe', 'yolov8' (default is opencv).
@@ -91,6 +94,9 @@ def verify(
         normalization (string): Normalize the input image before feeding it to the model.
             Options: base, raw, Facenet, Facenet2018, VGGFace, VGGFace2, ArcFace (default is base)
 
+        silent (boolean): Suppress or allow some log messages for a quieter analysis process
+            (default is False).
+
     Returns:
         result (dict): A dictionary containing verification results with following keys.
 
@@ -105,7 +111,7 @@ def verify(
 
         - 'model' (str): The chosen face recognition model.
 
-        - 'similarity_metric' (str): The chosen similarity metric for measuring distances.
+        - 'distance_metric' (str): The chosen similarity metric for measuring distances.
 
         - 'facial_areas' (dict): Rectangular regions of interest for faces in both images.
             - 'img1': {'x': int, 'y': int, 'w': int, 'h': int}
@@ -126,6 +132,7 @@ def verify(
         align=align,
         expand_percentage=expand_percentage,
         normalization=normalization,
+        silent=silent,
     )
 
 
@@ -247,7 +254,7 @@ def find(
             in the database will be considered in the decision-making process.
 
         model_name (str): Model for face recognition. Options: VGG-Face, Facenet, Facenet512,
-            OpenFace, DeepFace, DeepID, Dlib, ArcFace and SFace (default is VGG-Face).
+            OpenFace, DeepFace, DeepID, Dlib, ArcFace, SFace and GhostFaceNet (default is VGG-Face).
 
         distance_metric (string): Metric for measuring similarity. Options: 'cosine',
             'euclidean', 'euclidean_l2' (default is cosine).
@@ -324,7 +331,8 @@ def represent(
             include information for each detected face.
 
         model_name (str): Model for face recognition. Options: VGG-Face, Facenet, Facenet512,
-            OpenFace, DeepFace, DeepID, Dlib, ArcFace and SFace (default is VGG-Face.).
+            OpenFace, DeepFace, DeepID, Dlib, ArcFace, SFace and GhostFaceNet
+            (default is VGG-Face.).
 
         enforce_detection (boolean): If no face is detected in an image, raise an exception.
             Default is True. Set to False to avoid the exception for low-resolution images
@@ -345,7 +353,7 @@ def represent(
         results (List[Dict[str, Any]]): A list of dictionaries, each containing the
             following fields:
 
-        - embedding (np.array): Multidimensional vector representing facial features.
+        - embedding (List[float]): Multidimensional vector representing facial features.
             The number of dimensions varies based on the reference model
             (e.g., FaceNet returns 128 dimensions, VGG-Face returns 4096 dimensions).
 
@@ -386,7 +394,7 @@ def stream(
             in the database will be considered in the decision-making process.
 
         model_name (str): Model for face recognition. Options: VGG-Face, Facenet, Facenet512,
-            OpenFace, DeepFace, DeepID, Dlib, ArcFace and SFace (default is VGG-Face).
+            OpenFace, DeepFace, DeepID, Dlib, ArcFace, SFace and GhostFaceNet (default is VGG-Face).
 
         detector_backend (string): face detector backend. Options: 'opencv', 'retinaface',
             'mtcnn', 'ssd', 'dlib', 'mediapipe', 'yolov8' (default is opencv).

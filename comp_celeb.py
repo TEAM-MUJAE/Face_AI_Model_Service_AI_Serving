@@ -26,6 +26,7 @@ models = [
     "ArcFace", 
     "Dlib", 
     "SFace",
+    "GhostFaceNet",
 ]
 
 backends = [
@@ -307,6 +308,8 @@ async def upload_file(file: UploadFile = File(...)):
         # 얼굴 감지
         face = DetectorWrapper.detect_faces(img=content, detector_backend='dlib')
         
+        print("face",face)
+        
         # 각 이미지에서 감지된 얼굴 수 확인
         if len(face) > 1 :
             return JSONResponse(content={"error": "한 이미지에 두 명 이상의 인물이 검출되었습니다."}, status_code=400)
@@ -318,8 +321,10 @@ async def upload_file(file: UploadFile = File(...)):
         dfs = DeepFace.find(
                             img_path= cropped_face,
                             db_path=db_path,
-                            model_name=models[2],  # Facenet512
-                            distance_metric=metrics[1],  # euclidean
+                            # model_name=models[2],  # Facenet512
+                            model_name=models[9],  # GhostFaceNet
+                            # distance_metric=metrics[1],  # euclidean
+                            distance_metric=metrics[0],  # consine
                             detector_backend=backends[2],  # dlib
                             threshold = 1000000000
                             )        
