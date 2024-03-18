@@ -117,6 +117,7 @@ def match_and_visualize_sift_features(base_image_path, compare_image_paths, dete
     결과로 5장의 이미지가 생성되며, 각 이미지는 기준 이미지와 한 비교 이미지 사이의 매칭을 보여줍니다.
     """
 
+    
     # 결과 이미지 경로들을 저장할 리스트
     encoded_images = []
     
@@ -135,14 +136,16 @@ def match_and_visualize_sift_features(base_image_path, compare_image_paths, dete
 
     for idx, compare_image_path in enumerate(compare_image_paths):
         compare_image = cv2.imread(compare_image_path)
-        gray_compare = cv2.cvtColor(compare_image, cv2.COLOR_BGR2GRAY)
-        faces_compare = detector(gray_compare)
+        # gray_compare = cv2.cvtColor(compare_image, cv2.COLOR_BGR2GRAY)
+        # faces_compare = detector(gray_compare)
+        faces_compare = detector(compare_image)
         
         if len(faces_compare) == 0:
             print(f"No faces detected in image {idx}.")
             continue
         
-        landmarks_compare = predictor(gray_compare, faces_compare[0])
+        # landmarks_compare = predictor(gray_compare, faces_compare[0])
+        landmarks_compare = predictor(compare_image, faces_compare[0])
         feature_boxes_compare = calculate_feature_boxes(landmarks_compare)  # 비교 이미지의 바운더리 박스 계산
         draw_feature_boxes(compare_image, feature_boxes_compare)  # 비교 이미지에 바운더리 박스를 그림
         compare_filtered_kps, compare_filtered_descs = get_filtered_keypoints_and_descriptors(compare_image, sift, feature_boxes_compare)  # 필터링된 특징점 추출
@@ -158,7 +161,7 @@ def match_and_visualize_sift_features(base_image_path, compare_image_paths, dete
         matched_img = cv2.drawMatches(base_image, base_filtered_kps, compare_image, compare_filtered_kps, good_matches, None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
 
         # 결과 이미지 저장
-        output_path = os.path.join(output_dir, f"{filename_prefix}_matched.jpg")
+        output_path = os.path.join(output_dir, f"{filename_prefix}_{idx}_matched.jpg")
         cv2.imwrite(output_path, matched_img)
         print(f"Saved matched image to {output_path}")
         
@@ -202,7 +205,8 @@ def calculate_feature_similarity(base_image_path, compare_image_paths, feature, 
         if good_matches:
             average_distance = math.sqrt(sum(m.distance for m in good_matches) / len(good_matches))
         else:
-            average_distance = float('inf')  # 매치가 없는 경우, 평균 거리를 무한대로 설정
+            # average_distance = float('inf')  # 매치가 없는 경우, 평균 거리를 무한대로 설정
+            average_distance = 10000000000
 
         compare_scores.append((path, average_distance))
 
@@ -244,7 +248,7 @@ async def compare_faces(file1: UploadFile = File(...), file2: UploadFile = File(
    
     faces1 = DetectorWrapper.detect_faces(img=img1, detector_backend='dlib')
     faces2 = DetectorWrapper.detect_faces(img=img2, detector_backend='dlib')
-    faces3 = DetectorWrapper.detect_faces(img=img2, detector_backend='dlib')
+    faces3 = DetectorWrapper.detect_faces(img=img3, detector_backend='dlib')
     
     if len(faces1) > 1 or len(faces2) > 1 or len(faces3) > 1:
             return {"error": "한 이미지에 두 명 이상의 인물이 검출되었습니다."}
@@ -257,11 +261,20 @@ async def compare_faces(file1: UploadFile = File(...), file2: UploadFile = File(
         y = detected_face.facial_area.y
         w = detected_face.facial_area.w
         h = detected_face.facial_area.h
+        
+        pw = int(w * 0.2)
+        ph = int(h * 0.2)
+        
+        x = max(0, x- pw)
+        y = max(0, y- ph)
+        w = w + pw*2
+        h = h + ph*2
+        
         return img[y:y+h, x:x+w]
     
     cropped_face1 = facial_area(img1, faces1[0])
     cropped_face2 = facial_area(img2, faces2[0])
-    cropped_face3 = facial_area(img3, faces2[0])
+    cropped_face3 = facial_area(img3, faces3[0])
     
 
 
@@ -273,41 +286,45 @@ async def compare_faces(file1: UploadFile = File(...), file2: UploadFile = File(
     encoded_img_bytes2 = encoded_img2.tobytes()
     encoded_img_bytes3 = encoded_img3.tobytes()
     
-    # # 크롭된 얼굴 이미지 표시
+    # 크롭된 얼굴 이미지 표시
     # show_image(cropped_face1, "Cropped Face 1")
     # show_image(cropped_face2, "Cropped Face 2")
     # show_image(cropped_face3, "Cropped Face 3")
 
 
     try:
-        # 첫 번째 이미지와 두 번째 이미지 비교
-        result1 = DeepFace.verify(cropped_face1, cropped_face2, model_name='Facenet512', detector_backend='dlib', distance_metric='euclidean')
-        
-        # similarity_percent1 = int((1 - (result1['distance']/result1['threshold'])) * 100)
-
-        # 첫 번째 이미지와 세 번째 이미지 비교
-        result2 = DeepFace.verify(cropped_face1, cropped_face3, model_name='Facenet512', detector_backend='dlib', distance_metric='euclidean')
-        
-        # similarity_percent2 = int((1 - (result2['distance']/result2['threshold'])) * 100)          
-        
-        
+        print("A1")
         
         temp_file_path1 = os.path.join(temp_dir, file1.filename)
+        
+        print("B1")
+        
         temp_file_path2 = os.path.join(temp_dir, file2.filename)
+        
+        print("B2")
+
         temp_file_path3 = os.path.join(temp_dir, file3.filename)
+        
+        print("B3")
 
         # 임시 파일로 저장
         with NamedTemporaryFile(dir=temp_dir, delete=False, suffix=".png") as temp_file1:
             temp_file1.write(cv2.imencode('.png', cropped_face1)[1])
             temp_file_path1 = os.path.relpath(temp_file1.name, start=os.getcwd())
         
+        print("C1")
+        
         with NamedTemporaryFile(dir=temp_dir, delete=False, suffix=".png") as temp_file2:
             temp_file2.write(cv2.imencode('.png', cropped_face2)[1])
             temp_file_path2 = os.path.relpath(temp_file2.name, start=os.getcwd())
+            
+        print("C2")     
 
         with NamedTemporaryFile(dir=temp_dir, delete=False, suffix=".png") as temp_file3:
             temp_file3.write(cv2.imencode('.png', cropped_face3)[1])
             temp_file_path3 = os.path.relpath(temp_file3.name, start=os.getcwd())
+        
+        print("C3")
         
         # 이미지를 base64로 인코딩하여 상대 경로로 출력
         encoded_img1 = get_encoded_image(temp_file_path1)
@@ -318,6 +335,8 @@ async def compare_faces(file1: UploadFile = File(...), file2: UploadFile = File(
         # filename_prefix2 = os.path.splitext(os.path.basename(temp_file_path2))[0]
         # filename_prefix3 = os.path.splitext(os.path.basename(temp_file_path3))[0]
 
+        print("D1")
+        
         # 특징 매칭 및 시각화
         sift = cv2.SIFT_create()
         landmark_sift_paths = []
@@ -326,27 +345,48 @@ async def compare_faces(file1: UploadFile = File(...), file2: UploadFile = File(
         nose_similarity = []
         mouth_similarity = []
         
+        print("D2")
+        
         # 파일 1과 파일 2 간의 매칭 및 시각화
-        landmark_sift_paths1 = match_and_visualize_sift_features(temp_file_path1, [temp_file_path2], detector, predictor, sift, temp_dir, os.path.splitext(os.path.basename(temp_file_path1))[0])
+        landmark_sift_paths1 = match_and_visualize_sift_features(temp_file_path1, [temp_file_path2], detector, predictor, sift, temp_dir, os.path.splitext(os.path.basename(temp_file_path2))[0])
         if landmark_sift_paths1:
             landmark_sift_paths.extend(landmark_sift_paths1)
 
+        print("E1")
+
         # 파일 1과 파일 3 간의 매칭 및 시각화
-        landmark_sift_paths2 = match_and_visualize_sift_features(temp_file_path1, [temp_file_path3, temp_file_path2], detector, predictor, sift, temp_dir, os.path.splitext(os.path.basename(temp_file_path1))[0])
+        landmark_sift_paths2 = match_and_visualize_sift_features(temp_file_path1, [temp_file_path3], detector, predictor, sift, temp_dir, os.path.splitext(os.path.basename(temp_file_path3))[0])
         if landmark_sift_paths2:
             landmark_sift_paths.extend(landmark_sift_paths2)
 
-        
+        print("E2")
+                
         for temp_file_path in [temp_file_path2, temp_file_path3]:
             print(temp_file_path)
             # landmark_sift_path = match_and_visualize_sift_features(temp_file_path1, [temp_file_path], detector, predictor, sift, temp_dir, os.path.splitext(os.path.basename(temp_file_path1))[0])
             # landmark_sift_paths.append(landmark_sift_path)
 
+            print("F1")
+            
             left_eye_similarity.append(calculate_feature_similarity(temp_file_path1, [temp_file_path], 'left_eye', detector, predictor, sift, temp_dir))
             right_eye_similarity.append(calculate_feature_similarity(temp_file_path1, [temp_file_path], 'right_eye', detector, predictor, sift, temp_dir))
             nose_similarity.append(calculate_feature_similarity(temp_file_path1, [temp_file_path], 'nose', detector, predictor, sift, temp_dir))
             mouth_similarity.append(calculate_feature_similarity(temp_file_path1, [temp_file_path], 'mouth', detector, predictor, sift, temp_dir))
             
+        # 첫 번째 이미지와 두 번째 이미지 비교
+        result1 = DeepFace.verify(temp_file_path1, temp_file_path2, model_name='GhostFaceNet', detector_backend='dlib', distance_metric='cosine')
+        
+        # similarity_percent1 = int((1 - (result1['distance']/result1['threshold'])) * 100)
+        
+        print("A2")
+
+        # 첫 번째 이미지와 세 번째 이미지 비교
+        result2 = DeepFace.verify(temp_file_path1, temp_file_path3, model_name='GhostFaceNet', detector_backend='dlib', distance_metric='cosine')
+        
+        # similarity_percent2 = int((1 - (result2['distance']/result2['threshold'])) * 100)          
+        
+        print("A3")
+
 
         # 결과 반환
         return {
