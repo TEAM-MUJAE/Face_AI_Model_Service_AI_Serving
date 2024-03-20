@@ -75,6 +75,15 @@ def facial_area(img, detected_face):
     y = detected_face.facial_area.y
     w = detected_face.facial_area.w
     h = detected_face.facial_area.h
+    
+    pw = int(w * 0.2)
+    ph = int(h * 0.2)
+
+    x = max(0, x- pw)
+    y = max(0, y- ph)
+    w = w + pw*2
+    h = h + ph*2
+    
     return img[y:y+h, x:x+w]
 
 # 이미지에서 얼굴 랜드마크를 찾고, 그린 후 파일로 저장하는 함수
