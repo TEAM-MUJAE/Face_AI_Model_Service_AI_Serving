@@ -277,6 +277,15 @@ async def verify_other(file1: UploadFile = File(...), file2: UploadFile = File(.
             y = detected_face.facial_area.y
             w = detected_face.facial_area.w
             h = detected_face.facial_area.h
+            
+            pw = int(w * 0.2)
+            ph = int(h * 0.2)
+        
+            x = max(0, x- pw)
+            y = max(0, y- ph)
+            w = w + pw*2
+            h = h + ph*2
+            
             return img[y:y+h, x:x+w]
 
         print("cropped_face1", facial_area(img1, faces1[0]))

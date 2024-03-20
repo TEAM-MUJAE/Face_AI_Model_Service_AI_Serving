@@ -233,7 +233,7 @@ def get_encoded_image(image_path):
     
 @router.post("/people")
 async def compare_faces(file1: UploadFile = File(...), file2: UploadFile = File(...), file3: UploadFile = File(...)):
-     
+    
     contents1 = await file1.read()
     contents2 = await file2.read()
     contents3 = await file3.read()
@@ -245,7 +245,7 @@ async def compare_faces(file1: UploadFile = File(...), file2: UploadFile = File(
     img1 = cv2.imdecode(nparr1, cv2.IMREAD_COLOR)
     img2 = cv2.imdecode(nparr2, cv2.IMREAD_COLOR)
     img3 = cv2.imdecode(nparr3, cv2.IMREAD_COLOR)
-   
+    
     faces1 = DetectorWrapper.detect_faces(img=img1, detector_backend='dlib')
     faces2 = DetectorWrapper.detect_faces(img=img2, detector_backend='dlib')
     faces3 = DetectorWrapper.detect_faces(img=img3, detector_backend='dlib')
@@ -253,7 +253,7 @@ async def compare_faces(file1: UploadFile = File(...), file2: UploadFile = File(
     if len(faces1) > 1 or len(faces2) > 1 or len(faces3) > 1:
             return {"error": "한 이미지에 두 명 이상의 인물이 검출되었습니다."}
         
-     # 얼굴 크롭 및 저장
+    # 얼굴 크롭 및 저장
     def facial_area(img, detected_face):
         # 가정: detected_face 객체의 facial_area 속성은 FacialAreaRegion 객체이며,
         # 이 객체는 x, y, w, h 속성을 가진다.
