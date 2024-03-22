@@ -164,7 +164,7 @@ def match_and_visualize_sift_features(base_image_path, compare_image_paths, dete
         matches = flann.knnMatch(base_filtered_descs, compare_filtered_descs, k=2)
 
         # 좋은 매치 필터링
-        good_matches = [m for m, n in matches if m.distance <0.9 * n.distance]
+        good_matches = [m for m, n in matches if m.distance <0.8 * n.distance]
 
         # 매칭 결과 시각화
         matched_img = cv2.drawMatches(base_image, base_filtered_kps, compare_image, compare_filtered_kps, good_matches, None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
