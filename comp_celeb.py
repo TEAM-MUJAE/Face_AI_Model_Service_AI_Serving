@@ -49,8 +49,9 @@ db_dirname = "img_for_ai"
 # 운영 체제에 따라 최상위 디렉토리 설정
 if os.name == "nt":  # Windows
     top_dir = "C:/"
-elif os.name == "posix":  # macOS or Linux
-    top_dir = "/"
+elif os.name == "posix":  # Linux
+    # top_dir = "/home/ubuntu/"
+    top_dir = "/app/"
 
 print("top_dir",top_dir)
 
