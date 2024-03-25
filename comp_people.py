@@ -136,6 +136,8 @@ def match_and_visualize_sift_features(base_image_path, compare_image_paths, dete
 
     for idx, compare_image_path in enumerate(compare_image_paths):
         compare_image = cv2.imread(compare_image_path)
+        
+        compare_image = cv2.resize(compare_image, (base_image.shape[1], base_image.shape[0]))
         # gray_compare = cv2.cvtColor(compare_image, cv2.COLOR_BGR2GRAY)
         # faces_compare = detector(gray_compare)
         faces_compare = detector(compare_image)
@@ -191,6 +193,8 @@ def calculate_feature_similarity(base_image_path, compare_image_paths, feature, 
     compare_scores = []
     for path in compare_image_paths:
         compare_image = cv2.imread(path)
+        
+        compare_image = cv2.resize(compare_image, (base_image.shape[1], base_image.shape[0]))
         gray_compare = cv2.cvtColor(compare_image, cv2.COLOR_BGR2GRAY)
         faces_compare = detector(gray_compare)
         landmarks_compare = predictor(gray_compare, faces_compare[0])
