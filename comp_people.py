@@ -210,7 +210,7 @@ def calculate_feature_similarity(base_image_path, compare_image_paths, feature, 
             average_distance = math.sqrt(sum(m.distance for m in good_matches) / len(good_matches))
         else:
             # average_distance = float('inf')  # 매치가 없는 경우, 평균 거리를 무한대로 설정
-            average_distance = 10000000000
+            average_distance = 100000000
 
         compare_scores.append((path, average_distance))
 
