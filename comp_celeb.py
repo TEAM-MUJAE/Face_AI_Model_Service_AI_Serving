@@ -4,6 +4,7 @@ from fastapi import FastAPI, File, UploadFile,Request,APIRouter #,HTTPException
 from fastapi.responses import HTMLResponse,JSONResponse #,RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sift.sift import get_sift_features
+from translate import Translator
 
 import os
 import shutil
@@ -198,6 +199,8 @@ def match_and_visualize_sift_features(base_image_path, compare_image_paths, dete
 
     for idx, compare_image_path in enumerate(compare_image_paths):
         compare_image = cv2.imread(compare_image_path)
+        
+        compare_image = cv2.resize(compare_image, (base_image.shape[1], base_image.shape[0]))
         gray_compare = cv2.cvtColor(compare_image, cv2.COLOR_BGR2GRAY)
         faces_compare = detector(gray_compare)
         
@@ -269,8 +272,11 @@ def calculate_feature_similarity(base_image_path, compare_image_paths, feature, 
     base_filtered_kps, base_filtered_descs = get_filtered_keypoints_and_descriptors(base_image, sift, {feature: feature_boxes_base[feature]})
     
     compare_scores = []
-    for path in compare_image_paths:
-        compare_image = cv2.imread(path)
+    for idx, compare_image_path in enumerate(compare_image_paths):
+        compare_image = cv2.imread(compare_image_path)
+        
+        compare_image = cv2.resize(compare_image, (base_image.shape[1], base_image.shape[0]))
+        
         gray_compare = cv2.cvtColor(compare_image, cv2.COLOR_BGR2GRAY)
         faces_compare = detector(gray_compare)
         landmarks_compare = predictor(gray_compare, faces_compare[0])
@@ -281,13 +287,14 @@ def calculate_feature_similarity(base_image_path, compare_image_paths, feature, 
         matches = flann.knnMatch(base_filtered_descs, compare_filtered_descs, k=2)
         
         # 좋은 매치 필터링하여 평균 거리 계산
-        good_matches = [m for m, n in matches if m.distance < 1 * n.distance]
+        good_matches = [m for m, n in matches if m.distance < 0.8 * n.distance]
         if good_matches:
             average_distance = math.sqrt(sum(m.distance for m in good_matches) / len(good_matches))
         else:
-            average_distance = float('inf')  # 매치가 없는 경우, 평균 거리를 무한대로 설정
+            # average_distance = float('inf')  # 매치가 없는 경우, 평균 거리를 무한대로 설정
+            average_distance = 100000000  # 매치가 없는 경우, 평균 거리를 무한대로 설정
         
-        compare_scores.append((path, average_distance))
+        compare_scores.append((compare_image_path, average_distance))
 
     # 평균 거리(유사도 점수)에 따라 순위를 매기고 반환 (값이 작을수록 더 유사)
     ranked_scores = sorted(compare_scores, key=lambda x: x[1])
@@ -336,6 +343,7 @@ async def upload_file(file: UploadFile = File(...)):
                             # distance_metric=metrics[1],  # euclidean
                             distance_metric=metrics[0],  # consine
                             detector_backend=backends[2],  # dlib
+                            threshold= 0.9,
                             )        
 
         # print("Dfs",dfs)
@@ -353,6 +361,7 @@ async def upload_file(file: UploadFile = File(...)):
                 paths = top_similar_faces['identity'].tolist()  # 이미지 경로 리스트로 변환
                 distances = top_similar_faces['distance'].tolist()  # 거리 값 리스트로 변환
                 
+                
                 total_similar_faces = []
                 cropped_file_paths = [] # 크롭된 이미지 경로 초기화
                 landmark_paths = [] # 랜드마크된 이미지 경로 초기화
@@ -362,13 +371,30 @@ async def upload_file(file: UploadFile = File(...)):
                 nose_socore_distances= [] # 눈,코,입 유사도 값 초기화
                 mouth_socore_distances= [] # 눈,코,입 유사도 값 초기화
                 
+                translator = Translator(to_lang="ko")
+                
                 for path, distance in zip(paths, distances):
-                    total_similar_faces.append([path, distance])
+                    # Read the image from the path
+                    with open(path, "rb") as image_file:
+                        # Convert the image to base64
+                        base64_image = base64.b64encode(image_file.read()).decode('utf-8')
+                
+                    # total_similar_faces.append([base64_image, distance])
+                    
+                    # 이미지 파일 이름 추출 (확장자 제외)
+                    image_name1 = os.path.basename(path).split('.')[0]
+                    
+                    translated_name = translator.translate(image_name1)
+                    
+                    print("translated_name",translated_name)
+                    
+                    total_similar_faces.append([base64_image, distance,translated_name])
+
                 
                 # 결과 출력
-                print(total_similar_faces)
+                # print(total_similar_faces)
                 
-                print("cropped_face",cropped_face)
+                # print("cropped_face",cropped_face)
                 
                 # 크롭된 이미지 저장
                 cropped_filename1 = f"cropped_{file.filename}"  # 크롭된 이미지 파일명 정의
@@ -401,7 +427,7 @@ async def upload_file(file: UploadFile = File(...)):
                     
                     sift = cv2.SIFT_create()
                     
-                    landmark_sift_path = match_and_visualize_sift_features(temp_file_path, [identity_path], detector, predictor,sift,temp_dir,filename_prefix)
+                    landmark_sift_path = match_and_visualize_sift_features(cropped_file_path1, [identity_path], detector, predictor,sift,temp_dir,filename_prefix)
                     
                     # print("landmark_path is",landmark_path)
                     # print("landmark_sift_path is",landmark_sift_path)
@@ -413,10 +439,10 @@ async def upload_file(file: UploadFile = File(...)):
                         landmark_sift_paths.append(landmark_sift_path)
                     
                     
-                    left_eye_similarity_rankings = calculate_feature_similarity(temp_file_path, [identity_path], 'left_eye', detector, predictor, sift, temp_dir)
-                    right_eye_similarity_rankings = calculate_feature_similarity(temp_file_path, [identity_path], 'right_eye', detector, predictor, sift, temp_dir)
-                    nose_similarity_rankings = calculate_feature_similarity(temp_file_path, [identity_path], 'nose', detector, predictor, sift, temp_dir)
-                    mouth_similarity_rankings = calculate_feature_similarity(temp_file_path, [identity_path], 'mouth', detector, predictor, sift, temp_dir)
+                    left_eye_similarity_rankings = calculate_feature_similarity(cropped_file_path1, [identity_path], 'left_eye', detector, predictor, sift, temp_dir)
+                    right_eye_similarity_rankings = calculate_feature_similarity(cropped_file_path1, [identity_path], 'right_eye', detector, predictor, sift, temp_dir)
+                    nose_similarity_rankings = calculate_feature_similarity(cropped_file_path1, [identity_path], 'nose', detector, predictor, sift, temp_dir)
+                    mouth_similarity_rankings = calculate_feature_similarity(cropped_file_path1, [identity_path], 'mouth', detector, predictor, sift, temp_dir)
                     
                     for ranking in left_eye_similarity_rankings:
                         left_eyes_socore_distances.append(ranking)
