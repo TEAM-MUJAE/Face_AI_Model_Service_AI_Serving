@@ -1,4 +1,3 @@
-# python == 3.10.11
 absl-py==2.1.0
 acme==2.9.0
 annotated-types==0.6.0
@@ -49,6 +48,8 @@ keras==2.15.0
 kiwisolver==1.4.5
 lazy_loader==0.3
 libclang==16.0.6
+libretranslatepy==2.1.1
+lxml==5.1.0
 Markdown==3.5.2
 MarkupSafe==2.1.5
 matplotlib==3.8.3
@@ -98,6 +99,7 @@ termcolor==2.4.0
 threadpoolctl==3.3.0
 tifffile==2024.2.12
 tqdm==4.66.2
+translate==3.6.1
 typing_extensions==4.10.0
 tzdata==2024.1
 urllib3==2.0.7
