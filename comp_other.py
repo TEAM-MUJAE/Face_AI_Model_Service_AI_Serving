@@ -147,6 +147,8 @@ def match_and_visualize_sift_features(base_image_path, compare_image_paths, dete
         print("start4")
         
         compare_image = cv2.imread(compare_image_path)
+        
+        compare_image = cv2.resize(compare_image, (base_image.shape[1], base_image.shape[0]))
         gray_compare = cv2.cvtColor(compare_image, cv2.COLOR_BGR2GRAY)
         faces_compare = detector(gray_compare)
         
@@ -164,7 +166,7 @@ def match_and_visualize_sift_features(base_image_path, compare_image_paths, dete
         matches = flann.knnMatch(base_filtered_descs, compare_filtered_descs, k=2)
 
         # 좋은 매치 필터링
-        good_matches = [m for m, n in matches if m.distance <0.8 * n.distance]
+        good_matches = [m for m, n in matches if m.distance <0.9 * n.distance]
 
         # 매칭 결과 시각화
         matched_img = cv2.drawMatches(base_image, base_filtered_kps, compare_image, compare_filtered_kps, good_matches, None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
@@ -198,6 +200,7 @@ def calculate_feature_similarity(base_image_path, compare_image_paths, feature, 
     compare_scores = []
     for path in compare_image_paths:
         compare_image = cv2.imread(path)
+        compare_image = cv2.resize(compare_image, (base_image.shape[1], base_image.shape[0]))
         gray_compare = cv2.cvtColor(compare_image, cv2.COLOR_BGR2GRAY)
         faces_compare = detector(gray_compare)
         landmarks_compare = predictor(gray_compare, faces_compare[0])
